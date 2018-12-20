@@ -390,7 +390,7 @@ p1 <- ggplot(rowscores, aes(x=rowscores$Dim1,y=rowscores$Dim2))+
   #  xlim(-4,4)+
   # geom_text_repel(aes(label=rownames(rowscores)), cex=5, segment.alpha=0.2) +
   theme_classic()+
-  labs(title="MP Village No Quad", x="Dimension 1", y="Dimension 2")+
+  labs(title="Morne Patate Village", x="Dimension 1", y="Dimension 2")+
   theme(plot.title=element_text(size=rel(2), hjust=0.5),axis.title=element_text(size=rel(1.75)),
         axis.text=element_text(size=rel(1.5)))
 p1
@@ -404,7 +404,7 @@ p2 <- ggplot(colscores, aes(x=colscores$Dim1,y=colscores$Dim2))+
   # geom_text(aes(label=rownames(colscores)),vjust=-.6, cex=5)+
   geom_text_repel(aes(label=rownames(colscores)), cex=5, segment.alpha=0.2) +
   theme_classic()+
-  labs(title="MP Village No Quad", x="Dimension 1", y="Dimension 2")+
+  labs(title="Morne Patate Village", x="Dimension 1", y="Dimension 2")+
   theme(plot.title=element_text(size=rel(2.25), hjust=0.5),axis.title=element_text(size=rel(1.75)),
         axis.text=element_text(size=rel(1.5)))
 p2
@@ -438,7 +438,7 @@ p3 <- ggplot(scoreDates, aes(x=scoreDates$Dim1,y=scoreDates$blueMCD))+
   theme_classic()+
   scale_x_continuous(breaks=seq(-2, 10, 1))+
     scale_y_continuous(breaks=seq(1700, 1930, 10))+
-  labs(title="Morne Patate No Quad", x="Dimension 1", y="BLUE MCD")+
+  labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD")+
   theme(plot.title=element_text(size=rel(2.25), hjust=0.5),axis.title=element_text(size=rel(1.75)),
         axis.text=element_text(size=rel(1.5)))
 p3 
@@ -466,10 +466,10 @@ p5 <- ggplot(scoreDates, aes(x=scoreDates$Dim1, weight=scoreDates$Count/sum(scor
   #stat_function(fun = dnorm, colour = "blue")+
   scale_x_continuous(breaks=seq(-3, 9.5, 0.5))+
   theme_classic()+
-  labs(title="MP Village No Quad", x="Dimension 1", y="Density")+
+  labs(title="Morne Patate Village", x="Dimension 1", y="Density")+
   theme(plot.title=element_text(size=rel(2.25), hjust=0.5),axis.title=element_text(size=rel(1.75)),
         axis.text=element_text(size=rel(1.5)))
-p5A <- p5 + geom_density(fill=NA) + geom_vline(xintercept=c(3), colour="black")
+p5A <- p5 + geom_density(fill=NA) + geom_vline(xintercept=c(0, 3), colour="black")
 p5A
 ggsave("07_MPVillage_AllPhases_histogram_NoQuad.png", p5A, width=10, height=7.5, dpi=300)
 
@@ -481,6 +481,9 @@ scoreDates$Phase <- NA
 scoreDates$Phase[(scoreDates[,1] <= 0.0)] <- 'P03'
 scoreDates$Phase[(scoreDates[,1] > 0.0) & (scoreDates[,1] < 3.0)] <- 'P02'
 scoreDates$Phase[(scoreDates[,1] > 3.0)] <- 'P01'
+
+write.csv(scoreDates, file='scoreDates_MPvillage.csv')
+
 
 
 #Order by dim1 score
@@ -498,7 +501,42 @@ CA_MCD_Phase2 <- left_join(WareByUnitT2Sorted, CA_MCD_Phase, by='unit')
 #get rid of dimscores and MCD columns, keep phase column
 CA_MCD_Phase2 <- CA_MCD_Phase2[-c(1, 25:29)]
 
+p6 <- ggplot(CA_MCD_Phase,aes(x=CA_MCD_Phase$Dim1,y=CA_MCD_Phase$blueMCD))+
+  #  scale_y_continuous(limits=c(1790, 1920))+
+  geom_point(aes(colour=CA_MCD_Phase$Phase),size=5)+
+ # geom_text_repel(aes(label=CA_MCD_Phase$unit), cex=6) +
+  geom_text(aes(label=CA_MCD_Phase$unit),vjust=-.6, cex=5)+
+    theme_classic()+
+  labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD")+
+  theme(plot.title=element_text(size=rel(2), hjust=0.5),axis.title=element_text(size=rel(1.75)),
+        axis.text=element_text(size=rel(1.5)), legend.text=element_text(size=rel(1.75)),
+        legend.title=element_text(size=rel(1.5)), legend.position="bottom")+
+  scale_colour_manual(name="DAACS Phase",
+                      labels=c("P01", "P02", "P03"),
+                      values=c("skyblue", "blue", "darkblue"))
+p6
+#save the plot for website chronology page/presentations
+ggsave("MPvillage_Dim1MCDcolor_2018.png", p6, width=10, height=7.5, dpi=300)
+
+p7 <- ggplot(CA_MCD_Phase,aes(x=CA_MCD_Phase$Dim1,y=CA_MCD_Phase$blueMCD))+
+  #  scale_y_continuous(limits=c(1790, 1920))+
+  geom_point(aes(colour=CA_MCD_Phase$Phase),size=5)+
+  #geom_text_repel(aes(label=CA_MCD_Phase$unit), cex=6) +
+  #geom_text(aes(label=CA_MCD_Phase$unit),vjust=-.6, cex=5)+
+  theme_classic()+
+  labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD")+
+  theme(plot.title=element_text(size=rel(2), hjust=0.5),axis.title=element_text(size=rel(1.75)),
+        axis.text=element_text(size=rel(1.5)), legend.text=element_text(size=rel(1.75)),
+        legend.title=element_text(size=rel(1.5)), legend.position="bottom")+
+  scale_colour_manual(name="DAACS Phase",
+                      labels=c("P01", "P02", "P03"),
+                      values=c("skyblue", "blue", "darkblue"))
+p7
+ggsave("MPvillage_Dim1MCDnolabel_2018.png", p7, width=10, height=7.5, dpi=300)
+
+
 #aggregate counts for ware type by phase
+require(plyr)
 WareByPhase <- ddply(CA_MCD_Phase2, "Phase", numcolwise(sum))
 
 #Check ware by phase
