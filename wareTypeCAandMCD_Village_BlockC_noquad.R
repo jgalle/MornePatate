@@ -1,6 +1,5 @@
 # set the working directory
-#setwd("P:/DAACS/Archaeological Sites/Dominica/Morne Patate/Chronology/AllContexts/WithBlockC")
-setwd("E:/MP/WithBlockC/Village_NoQuad")
+#setwd("P:/DAACS/Archaeological Sites/Dominica/Morne Patate/Chronology/AllContexts/WithBlockC"
 
 # wareTypeCAandMCD.R
 # Establish a DBI connection to DAACS PostgreSQL database and submnit SQL queries
@@ -8,13 +7,19 @@ setwd("E:/MP/WithBlockC/Village_NoQuad")
 # Last update: FDN 8.5.2014  
 # Edited by:   LAB 1.17.2017 for Morne Patate
 # Edited by:  LC 12.4.2017 hermitage phases
-# Edited by:   FDN 12.21.2017 for tidyR
+# Edited by:   FDN 12.21.2018 more tidy; fixed MCD function to handle phases.
 
-
-#load the library
-require(RPostgreSQL)
+# load the libraries
+library(RPostgreSQL)
 library(dplyr)
-require(tidyr)
+library(tidyr)
+library(reshape2)
+library (ca)
+library (plotrix)
+library(ggplot2)
+library(viridis)
+
+
 
 # tell DBI which driver to use
 pgSQL <- dbDriver("PostgreSQL")
@@ -23,218 +28,236 @@ DRCcon<-dbConnect(pgSQL, host='drc.iath.virginia.edu', port='5432',
                   dbname='daacs-production',
                   user='drcquery', password='!queryacct!')
 
-
+#### 1. get the table with the ware type date ranges ####
 # get the table with the ware type date ranges
 MCDTypeTable<- dbGetQuery(DRCcon,'
                           SELECT * 
                           FROM "tblCeramicWare"
                           ')
 
-
+#### 2. submit a SQL query: note the use of \ as an escape sequence ####
 # submit a SQL query: note the use of \ as an escape sequence
 wareTypeData<-dbGetQuery(DRCcon,'
-                         SELECT
-                         "public"."tblCeramic"."Quantity",
-                         "public"."tblCeramicWare"."Ware",
-                         "public"."tblCeramicWare"."BeginDate",
-                         "public"."tblCeramicWare"."EndDate",
-                         "public"."tblCeramicCEWType"."CeramicCEWType",
-                         "public"."tblProjectName"."ProjectName",
-                         "public"."tblContext"."ProjectID",
-                         "public"."tblContext"."Context",
-                         "public"."tblContext"."DAACSStratigraphicGroup",
-                         "public"."tblContext"."MasterContextNumber",
-                         "public"."tblContext"."FeatureNumber",
-                         "public"."tblContext"."QuadratID",
-                         "public"."tblContext"."DAACSPhase",
-                         "public"."tblContext"."MasterContextInterpretation"
-                         
-                         FROM
-                         "public"."tblProjectName"
-                         INNER JOIN "public"."tblProject" ON "public"."tblProject"."ProjectNameID" = "public"."tblProjectName"."ProjectNameID"
-                         INNER JOIN "public"."tblContext" ON "public"."tblContext"."ProjectID" = "public"."tblProject"."ProjectID"
-                         INNER JOIN "public"."tblContextSample" ON "public"."tblContextSample"."ContextAutoID" = "public"."tblContext"."ContextAutoID"
-                         INNER JOIN "public"."tblGenerateContextArtifactID" ON "public"."tblContextSample"."ContextSampleID" = "public"."tblGenerateContextArtifactID"."ContextSampleID"
-                         INNER JOIN "public"."tblCeramic" ON "public"."tblCeramic"."GenerateContextArtifactID" = "public"."tblGenerateContextArtifactID"."GenerateContextArtifactID"
-                         INNER JOIN "public"."tblCeramicWare" ON "public"."tblCeramic"."WareID" = "public"."tblCeramicWare"."WareID"
-                         LEFT JOIN "public"."tblCeramicCEWType" ON "public"."tblCeramic"."CeramicCEWTypeID" = "public"."tblCeramicCEWType"."CeramicCEWTypeID"
-                         
-                         WHERE                     
-                         "public"."tblContext"."ProjectID" = \'1243\'
-                         ')             
+  SELECT
+  "public"."tblCeramic"."Quantity",
+  "public"."tblCeramicWare"."Ware",
+  "public"."tblCeramicGenre"."CeramicGenre",
+  "public"."tblCeramicCEWType"."CeramicCEWType",
+  "public"."tblProjectName"."ProjectName",
+  "public"."tblContext"."ProjectID",
+  "public"."tblContext"."Context",
+  "public"."tblContextDepositType"."DepositType",
+  "public"."tblContext"."DAACSStratigraphicGroup",
+  "public"."tblContext"."MasterContextNumber",
+  "public"."tblContext"."FeatureNumber",
+  "public"."tblContextFeatureType"."FeatureType",
+  "public"."tblContext"."QuadratID",
+  "public"."tblContext"."DAACSPhase"
+  FROM
+  "public"."tblProjectName"
+  INNER JOIN  "public"."tblProject" ON "public"."tblProject"."ProjectNameID" = 
+   "public"."tblProjectName"."ProjectNameID"
+  INNER JOIN  "public"."tblContext" ON "public"."tblContext"."ProjectID" = 
+    "public"."tblProject"."ProjectID"
+  LEFT JOIN "public"."tblContextDepositType" ON "public"."tblContext"."DepositTypeID" = 
+  "public"."tblContextDepositType"."DepositTypeID"
+  LEFT JOIN "public"."tblContextFeatureType" ON "public"."tblContext"."FeatureTypeID" = 
+  "public"."tblContextFeatureType"."FeatureTypeID" 
+  INNER JOIN "public"."tblContextSample" ON "public"."tblContextSample"."ContextAutoID" =
+  "public"."tblContext"."ContextAutoID"
+  INNER JOIN "public"."tblGenerateContextArtifactID" ON "public"."tblContextSample"."ContextSampleID" =
+  "public"."tblGenerateContextArtifactID"."ContextSampleID"
+  INNER JOIN "public"."tblCeramic" ON "public"."tblCeramic"."GenerateContextArtifactID" =
+  "public"."tblGenerateContextArtifactID"."GenerateContextArtifactID"
+  INNER JOIN "public"."tblCeramicWare" ON "public"."tblCeramic"."WareID" =
+  "public"."tblCeramicWare"."WareID"
+  LEFT JOIN "public"."tblCeramicGenre" ON "public"."tblCeramic"."CeramicGenreID" =
+  "public"."tblCeramicGenre"."CeramicGenreID"
+  LEFT JOIN "public"."tblCeramicCEWType" ON "public"."tblCeramic"."CeramicCEWTypeID" =
+  "public"."tblCeramicCEWType"."CeramicCEWTypeID"
+  WHERE                     
+  "public"."tblContext"."ProjectID" = \'1243\'
+  ')             
 
 
-#FDN do a summary using tidyR
-summary1 <- wareTypeData %>% group_by(ProjectName,ProjectID) %>% summarise(count = sum(Quantity))
+# do a summary
+summary1 <- wareTypeData %>%
+            group_by(ProjectName,ProjectID,Ware) %>% 
+            summarise(count = sum(Quantity))
+options(tibble.print_min=100)
 summary1
 
 
-##Section 1: Customize the Manufacturing Dates ######################
-
+#### 3. Any customizations to the Ware Type dates should go here.... ####
 # Change dates for French CEW to 1675-1900
 MCDTypeTable <- MCDTypeTable %>% 
-  mutate(BeginDate = replace(BeginDate, Ware %in% c('French Coarse Earthenware','Vallauris',
-                                                    'Saintonge', 'de lHuveaune'), 1675),
-         EndDate = replace(EndDate, Ware %in% c('French Coarse Earthenware','Vallauris',
-                                                'Saintonge','de lHuveaune'), 1900))
+  mutate(BeginDate = replace(BeginDate, Ware %in% c('French Coarse Earthenware',
+                                                    'Vallauris',
+                                                    'Saintonge',
+                                                    'de lHuveaune'), 1675),
+         EndDate = replace(EndDate, Ware %in% c('French Coarse Earthenware',
+                                                'Vallauris',
+                                                'Saintonge',
+                                                'de lHuveaune'),1900))
+
+# Set a minimal start date for all types - this may bite you later if new start 
+# dates are >= end dates
 MCDTypeTable <- MCDTypeTable %>% 
-  mutate(BeginDate = ifelse(BeginDate < 1675, 1675, BeginDate)) 
+                mutate(BeginDate = ifelse(BeginDate < 1675, 1675, BeginDate)) 
 
 
-#Replace 'Caribbean CEW' ware type with applicable CEW Type
-wareTypeData <-
-  mutate(wareTypeData, Ware=ifelse((Ware %in% c('Caribbean Coarse Earthenware, unid.',
-                                                'Caribbean Coarse Earthenware, wheel thrown',
-                                                'Caribbean Coarse Earthenware, hand built')), CeramicCEWType, Ware))
+# Replace 'Caribbean CEW' ware type with applicable CEW Type
+wareTypeData <- mutate(wareTypeData, Ware= ifelse((Ware %in% 
+                c('Caribbean Coarse Earthenware, unid.',
+                  'Caribbean Coarse Earthenware, wheel thrown',
+                  'Caribbean Coarse Earthenware, hand built')), CeramicCEWType, 
+                   Ware))
 
-#Replace Unid. Carib CEW type with 'Caribbean CEW Unid.'
-wareTypeData <-
-  mutate(wareTypeData, Ware=ifelse(Ware == 'Unidentifiable', 'Carribean CEW Unid.', Ware))
+# Replace Unid. Carib CEW ware type with 'Caribbean CEW Unid.'
+wareTypeData <- mutate(wareTypeData, Ware=ifelse(Ware == 'Unidentifiable', 
+                                                 'Carribean CEW Unid.', Ware))
 
-#Add rows to type data for MP CEW types
-MPCEW <- data.frame(WareID=NA, Ware=c('Morne Patate Type 1', 'Morne Patate Type 2', 'Morne Patate Type 2a', 'Morne Patate Type 2b',
-                                      'Morne Patate Type 3'), ObjectTypeID=NA, BeginDate=NA, EndDate=NA, CeramicMaterialID=NA, id=NA)
-MCDTypeTable <- bind_rows(MCDTypeTable, MPCEW)
-
-#Replace 'Caribbean CEW' ware type with applicable CEW Type
-MCDTypeTable <-
-  mutate(MCDTypeTable, Ware=ifelse(Ware == 'Unidentifiable', 'Carribean CEW Unid.', Ware))
+#### 4. Do a quick summary of the new ware type totals. ####
+summary2 <- wareTypeData %>% 
+  group_by(ProjectName, ProjectID, Ware) %>% 
+  summarise(count = sum(Quantity))
+summary2
 
 
-
-# Compute new numeric variables from original ones, which we will need to compute the MCDs
-# Non-tidy version
-# MCDTypeTable<-within(MCDTypeTable, {     # Notice that multiple vars can be changed
-#   midPoint <- (EndDate+BeginDate)/2
-#   span <- EndDate - BeginDate
-#   inverseVar <- 1/(span/6)##2 
-# })
-
-
-# FDN the tidyR version
+#### 5. Compute new numeric date variables from original ones #### 
+# Needed  to compute the MCDs.
 MCDTypeTable <- MCDTypeTable %>% 
   mutate(midPoint = (EndDate+BeginDate)/2,
          span = (EndDate - BeginDate),
          inverseVar = 1/(span/6)^2 
   )
 
-# Section 2:Create the UNIT Variable ######################
-# This is the level at which assemblages are aggregated
-# in the analysis
 
-# delete contexts that have no phase assignment
-# for MP we need to double check previous phases entered in DB
-# wareTypeData <- filter( wareTypeData, !(DAACSPhase %in% c('',' ')) )
-
-#sum(is.na(wareTypeData$DAACSPhase))
-
-# create the Unit Field
-# wareTypeData1 <-  mutate(wareTypeData, unit = paste(ProjectName,DAACSPhase))
-
+#### 6. Create the UNIT Variable ####
+# The UNIT variable contains the level at which assemblages are aggregated in 
+# the analysis. Note that we create a new dataframe: wareTypeData_Unit.
+# First some housekeeping so we do not stumble on the confusion between R's NA 
+# (SQL NULLs) and blanks. 
 wareTypeData$DAACSStratigraphicGroup[is.na(wareTypeData$DAACSStratigraphicGroup)] <- ''
 wareTypeData$FeatureNumber[is.na(wareTypeData$FeatureNumber)] <- ''
-
-wareTypeData1 <-
-  mutate(wareTypeData, unit=ifelse((FeatureNumber == '' & DAACSStratigraphicGroup == ''),
-                                   paste(Context),
-                                   ifelse((FeatureNumber != '' & DAACSStratigraphicGroup == ''),
-                                                 paste(Context,'F',FeatureNumber),
-                                                 ifelse((FeatureNumber == '' & DAACSStratigraphicGroup != ''),
-                                                        paste(DAACSStratigraphicGroup),
-                                                        ifelse((FeatureNumber != '' & DAACSStratigraphicGroup != ''),
-                                                               paste(FeatureNumber,DAACSStratigraphicGroup),
-                                                               paste(Context)
-                                                        )))))
+wareTypeData$QuadratID[is.na(wareTypeData$QuadratID)] <- '' 
 
 
-# FDN tidyR total type counts
-summary2 <-wareTypeData1 %>% group_by(Ware) %>%  summarise(Count=sum(Quantity))
-#print(summary2, n=100)
-#write.csv(summary2, "waresummary.csv")
-
-# Drop House Area C - data incomplete
-#wareTypeData1 <- filter(wareTypeData1, MasterContextNumber != 'BlockC')
-
-# Add area designation for STPs -- not necessary for this code unless you want to see Wares by Block
-# STPblocks <- read.csv('MP_Cxt_QuadID.csv', stringsAsFactors=F, header=T)
-# wareTypeData1 <- left_join(wareTypeData1, STPblocks, by='Context')
-# wareTypeData1$Block <- wareTypeData1$MasterContextNumber
-# wareTypeData1 <- mutate(wareTypeData1, Block=ifelse(Block =='STP', STPBlock, Block))
-
-# Remove ware types with counts of 1 or 2
-wareTypeData1 <- subset(wareTypeData1, ! wareTypeData1$Ware  %in%  c('Nottingham', 'Refined Earthenware, modern',
-                                                                     'American Stoneware',
-                                                                     'Refined Stoneware, unidentifiable',
-                                                                     'Fulham Type',
-                                                                     'Saintonge',
-                                                                     'Astbury Type', 'White Salt Glaze'))
+# Use case_when to cycle through QuadID, Feature, SG, and Context to assign 
+# aggregration unit. YOu will need to cutomize this logic for YOUR site.
+wareTypeData_Unit <- wareTypeData %>%  
+  mutate( unit = case_when(
+  FeatureNumber == "" & DAACSStratigraphicGroup == "" 
+  ~ paste(Context),
+  FeatureNumber == "" & DAACSStratigraphicGroup != "" 
+  ~ paste(DAACSStratigraphicGroup),
+  FeatureNumber != "" & DAACSStratigraphicGroup == ""
+  ~ paste(FeatureNumber, Context, sep= '.'),
+  FeatureNumber != "" & DAACSStratigraphicGroup != "" 
+  ~ paste(FeatureNumber,DAACSStratigraphicGroup, sep='.')
+  )) 
 
 
-## Section 3:Transpose the Data ######################
-
-# Create new data frame with contexts as rows and type as cols, with the
-# entries as counts
-WareByUnit <- wareTypeData1 %>% group_by(Ware,unit) %>% summarise(count = sum(Quantity))
-
-# now we transpose the data so that we end up with a context (rows) x type 
-# (cols) data matrix; unit ~ ware formula syntax, left side = row, right side = column, to fill in
-# body of table with the counts, fill rest with zeros
-require(reshape2)
-WareByUnitT <- dcast(WareByUnit, unit ~ Ware, value.var='count', fill=0 )
-
-# lets compute the totals for each context i.e. row
-# Note the use of column numbers as index values to get the type counts, which are
-# assumed to start iin col 2.
-WareByUnitTTotals<- rowSums(WareByUnitT[,2:ncol(WareByUnitT)])
-
-# OK now let's get rid of all the rows where totals are <= 5
-WareByUnitT1 <-WareByUnitT[WareByUnitTTotals>5,]  
+# Check on the content of the unit variable to make sure all is cool.
+table(wareTypeData_Unit$unit)
 
 
-##Section 4: Define an MCD function and Function to Remove Types w/o Dates ######################
+#### 7. Transpose the data for the MCD and CA ####
+wareByUnitT <- wareTypeData_Unit %>% group_by(Ware,unit) %>% 
+              summarise(count = sum(Quantity)) %>%
+              spread(Ware, value=count , fill=0 )
 
-# we build a function that remove types with no dates
-# Two arguments 1. unitData: dataframe with counts of ware types in units
-# the left variable IDs the units, while the rest of the varaibles are types
-# 2. typeData: a dataframe with at least two variables named 'midPoint' and 'inversevar'
-# containing the manufacturing midpoints and inverse variances for the types.
-# returns a list comprise of two dataframes:
-# unitDataWithDates has units with types with dates
-# typeDataWithDates has the types with dates
 
+#### 8. Remove specific ware types (if you must) and set sample size cut off  ####
+# 8.1 It is possible at the point to to drop types you do not in the  MCD computations
+# But it is not clear why one would want to do this. Here we name the types we do NOT
+# want included:
+wareByUnitT1 <- wareByUnitT %>% select( 
+                             - 'Nottingham', 
+                              - 'Refined Earthenware, modern',
+                             - 'American Stoneware',
+                            - 'Refined Stoneware, unidentifiable',
+                             - 'Fulham Type',
+                              - 'Saintonge',
+                             - 'Astbury Type', 
+                              - 'White Salt Glaze'
+                          )
+
+# 8.2  We may also want to enforce a sample size cut off on the MCD analysis.
+# MCDs and TPQs are more reliable with larger samples, but may be in 
+# useful in small ones. DAACS standard is N > 5.
+# Note the use of column numbers as index values to get the type counts, which 
+# are assumed to start in col 2.
+wareByUnitTTotals<- rowSums(wareByUnitT1[,-1])
+table(wareByUnitTTotals)
+wareByUnitT1 <-wareByUnitT1[wareByUnitTTotals > 5,]
+# And get rid of any types that do not occur in the subset of assemblages that 
+# DO  meet the sample size cutoff
+wareByUnitT1 <- wareByUnitT1[,c(T,colSums(wareByUnitT1[,-1])
+                                            > 0)]
+
+
+
+
+#### 9. Define functions to Remove Types w/o Dates and then compute MCDs ####
+# 9.1 We build a function that removes types with no dates, either because they 
+# have no dates in the MCDTypeTable or because they are not MCD Ware 
+# Types (e.g. they are CEW Types). This approach is useful because it returns a 
+# dataframe that contains ONLY types that went into the MCDs, which you may 
+# want to analyze using using other methods (e.g. CA).
+# Two arguments: 
+#   unitData: dataframe with counts of ware types in units
+#   the left variable IDs the units, while the rest of the varaibles are types
+#   typeData: a dataframe with at least three variables named 'Ware', 'midPoint'
+#   and 'inversevar' containing the manufacturing midpoints and inverse 
+#   variances for the types.
+# Returns a list comprised of two dataframes:
+#   unitDataWithDates has units with types with dates
+#   typeDataWithDates has the types with dates
 RemoveTypesNoDates <- function(unitData,typeData){
-  
   #unitData<- WareByUnitT1
-  #typeData <-MCDTypeTable
-  typesWithNoDates <- typeData$Ware[(is.na(typeData$midPoint))]
+  #typeData <-MCDTypeTabl
+  typesWithNoDates <- typeData$Ware[(is.na(typeData$midPoint))] 
+  # types in the MCD table with no dates.
+  moreTypesWithNoDates <- colnames(unitData)[-1][! colnames(unitData)[-1] %in% 
+                                                   typeData$Ware] 
+  # types in the data that are NOT in the MCD Type table.
+  typesWithNoDates <- c(typesWithNoDates, moreTypesWithNoDates)
   unitDataWithDates <- unitData[, ! colnames(unitData) %in%  typesWithNoDates]
   typeDataWithDates <- typeData[! typeData$Ware %in%  typesWithNoDates, ]
-  unitDataWithDates <- filter(unitDataWithDates, rowSums(unitDataWithDates[,2:ncol(unitDataWithDates)]) > 0)
-  return(list(unitDataWithDates=unitDataWithDates, typeDataWithDates=typeDataWithDates))
+  unitDataWithDates <- filter(unitDataWithDates, 
+                              rowSums(unitDataWithDates[,2:ncol(unitDataWithDates)])>0)
+  return(list(unitData = unitDataWithDates, 
+              typeData = typeDataWithDates))
 }
-WareandTypeDatawithDates <- RemoveTypesNoDates(WareByUnitT1, MCDTypeTable)
 
-# now we build a function that computes MCDs
-# two arguments: 1. unitData: a dataframe with the counts of ware types in units. We assume
-# the left variable IDs the units, while the rest of the varaibles are types
-# 2. typeData: a dataframe with at least two variables named 'midPoint' and 'inversevar'
-# containing the manufacturing midpoints and inverse variances for the types.
-# returns a list comprise of two dataframes: 
+# run the function
+dataForMCD <- RemoveTypesNoDates(wareByUnitT1 , MCDTypeTable)
+ 
+
+# Define a function that computes MCDs
+# Two arguments: 
+#   unitData: a dataframe with the counts of ware types in units. 
+#   We assume the first column IDs the units, while the rest of the columns 
+#   are counts of types.
+#   typeData: a dataframe with at least two variables named 'midPoint' and 
+#   'inversevar' containing the manufacturing midpoints and inverse variances 
+#   for the types.
+# Returns a list comprise of two dataframes: 
 #     MCDs has units and the vanilla and BLUE MCDs
-#     midPoints has the types and manufacturing midpoints, in the order they appeaed in the input
-#     unitData dataframe.  
-
+#     midPoints has the types and manufacturing midpoints, in the order they 
+#     appeared in the input unitData dataframe.  
 EstimateMCD<- function(unitData,typeData){
-  #for debugging
-  #unitData<- WareandTypeDatawithDates$unitDataWithDates
-  #typeData <-WareandTypeDatawithDates$typeDataWithDates
   countMatrix<- as.matrix(unitData[,2:ncol(unitData)])
-  unitNames <- (unitData[,1])
+  originalUnitName <-  colnames(unitData)[1]
+  colnames(unitData)[1] <- 'unitID'
+  unitID <- (unitData[,1])
+  unitID[is.na(unitID)] <-'Unassigned'
+  unitData[,1] <- unitID
   nUnits <- nrow(unitData)   
   nTypes<- nrow(typeData)
   nTypesFnd <-ncol(countMatrix)
   typeNames<- colnames(countMatrix)
-  
   # create two col vectors to hold inverse variances and midpoints
   # _in the order in which the type variables occur in the data_.
   invVar<-matrix(data=0,nrow=nTypesFnd, ncol=1)
@@ -247,7 +270,6 @@ EstimateMCD<- function(unitData,typeData){
       }
     }
   }
-  
   # compute the blue MCDs
   # get a unit by type matrix of inverse variances
   invVarMat<-matrix(t(invVar),nUnits,nTypesFnd, byrow=T)
@@ -261,431 +283,312 @@ EstimateMCD<- function(unitData,typeData){
   sumWts <- rowSums(countMatrix)
   # the vanilla MCDs
   MCD<-(countMatrix %*% mPoint) / sumWts
-  # Finally we assemble th results in to a list
-  MCDs<-data.frame(unitNames,MCD,blueMCD,sumWts)
-  colnames(MCDs)<- c('unit','MCD','blueMCD', 'Count' )
+  # now for the TPQs
+  meltedUnitData <- gather(unitData, key = Ware, value=count,- unitID)
+  meltedUnitData <- filter(meltedUnitData, count > 0) 
+  mergedUnitData <- inner_join(meltedUnitData, typeData, by='Ware')
+  # the trick is that to figure out the tpq. it's best to have each record (row) 
+  # represent an individual sherd  but in its current state, each record has 
+  # a count c:(c > 1). We must generate c records for each original record.
+  # Use rep and rownames - rowname is a unique number for each row, kind of 
+  # like an index. rep() goes through dataframe mergedUnitData and replicates 
+  # based on the count column, i.e. if count is 5 it will create 5 records or 
+  # rows and for columns 1 and 6 (col 1 is unit name and 6 is begin date.
+  repUnitData <- mergedUnitData[rep(rownames(mergedUnitData ),mergedUnitData$count),c(1,6)]
+  # once all the rows have a count of one, we run the quantile function
+  TPQ <- tapply(repUnitData$BeginDate,repUnitData$unitID, 
+                function(x) quantile(x, probs =1.0, type=3 ))              
+  TPQp95 <- tapply(repUnitData$BeginDate,repUnitData$unitID, 
+                   function(x) quantile(x, probs = .95 , type=3 ))                 
+  TPQp90 <- tapply(repUnitData$BeginDate,repUnitData$unitID, 
+                   function(x) quantile(x, probs = .90,  type=3 ))   
+  # Finally we assemble the results in to a list
+  MCDs<-data.frame(unitID, MCD, blueMCD, TPQ, TPQp95, TPQp90, sumWts )
+  colnames(MCDs)<- c(originalUnitName,'MCD','blueMCD', 'TPQ', 'TPQp95', 'TPQp90', 'Count')
   midPoints <- data.frame(typeNames,mPoint)
-  MCDs <- list(MCDs=MCDs,midPoints=midPoints)
+  MCDs <- list('MCDs'=MCDs,'midPoints'=midPoints)
   return(MCDs)
 } 
-
-#end of function EstimateMCD
+# end of function EstimateMCD
 
 # apply the function
-MCDByUnit<-EstimateMCD(WareandTypeDatawithDates$unitDataWithDates,WareandTypeDatawithDates$typeDataWithDates)
+MCDByUnit<-EstimateMCD(dataForMCD$unitData, dataForMCD$typeData)
 
 # let's see what it looks like
 MCDByUnit
 
-# a function to sort the rows and cols of a matrix based on the
+
+#### 10. Seriation diagram based on MCDs ####
+# First define a  function to sort the rows and cols of a matrix based on the
 # orders from two arguments (e.g. MCDs and midpoints)
 # arguments:  the name of the variable that contains the unit scores (e.g. MCDs)
-#             the name of the variable that contains the type score (e.g. the midpoints)
-#             the name of the dataframe that contains the counts of ware types in units
+#             the name of the variable that contains the type score (e.g. 
+#               the midpoints) 
+#             the name of the dataframe that contains the counts of ware types 
+#               in units
 # returns:    the sorted dataframe 
 sortData<- function(unitScores,typeScores,unitData){
-  #unitScores<-U3MCDByUnit$MCDs$blueMCD
-  #typeScores<-U3MCDByUnit$midPoints$mPoint
-  #unitData<- U3WareByUnitT1
-  sortedData<-unitData[order(unitScores),]
+  sortedData<-unitData[order(unitScores, decreasing=T),]
   sortedData<-sortedData[,c(1,order(typeScores)+1)]
   return(sortedData)
 }
 
 
-unitScores<-MCDByUnit$MCDs$blueMCD
-typeScores<-MCDByUnit$midPoints$mPoint
-unitData<- WareandTypeDatawithDates$unitDataWithDates
-sortedDataX<-unitData[order(unitScores),]
-sortedData0<-sortedDataX[,c(1,order(typeScores)+1)]
-
-WareByUnitT2Sorted<-sortData(MCDByUnit$MCDs$blueMCD,
+# apply the function
+unitDataSorted <-sortData(MCDByUnit$MCDs$blueMCD,
                              MCDByUnit$midPoints$mPoint,
-                             WareandTypeDatawithDates$unitDataWithDates)
+                             dataForMCD$unitData)
 
-# now we prep the sorted dataframe to make a Ford-style battleship plot
+#### 12.  Ford-style battleship plot  ####
 # convert to a matrix, whose cols are the counts
-# make the unit name a 'rowname" of the matrix
-Mat<-as.matrix(WareByUnitT2Sorted[,2:ncol(WareByUnitT2Sorted)])
-rownames(Mat)<-WareByUnitT2Sorted$unit
+# make the unit name a 'rowname' of the matrix
+Mat<-as.matrix(unitDataSorted[,2:ncol(unitDataSorted )])
+rownames(Mat)<-unitDataSorted $unit
 rSums<- matrix (rowSums(Mat),nrow(Mat),ncol(Mat), byrow=F)
 MatProp<-Mat/rSums
-
-
-#(package for seriation)
-library(plotrix) 
+# Do the plot
 battleship.plot(MatProp,
-                mar=c(2,5,5,1),
-                #main = 'Seriation by Blue MCD',
+                mar=c(2,6,10,1),
+                main = 'Seriation by Blue MCD',
                 xlab='Ware Type',
                 ylab= 'Context',
+                cex.labels=.5,
                 col='grey')
 
-# dump out a CSV for a seriation plot using Lipo's Excel macro 
-#write.csv(WareByUnitT2Sorted, file='DRC/WareByFeatureT1Sorted.csv')
+#### 13. Now let's try some Correspondence Analysis ####
+# You need to decide if you want to use exactly the same data that
+# wentinto the MCD analysis (dataForMCD$unitData), or the 
+# data will all the ware types. To chose, commment out one of these two lines:
+wareByUnitT_forCA <- wareByUnitT1  # use all the data
+# wareByUnitT_forCA <- dataForMCD$unitData # use ONLY the data used for MCDs
 
-##Section 5: Run the CA ######################
-
-# Remove context outliers for CA -- AFTER first run of CA
-WareByUnitT1 <- filter(WareByUnitT1, unit != '5364 F 062')
-
-# Remove columns (ware types) where totals < 0
-WareByUnitT1<-WareByUnitT1[,colSums(WareByUnitT1 != 0) > 0]
-
-# now let's try some Correspondence Analysis
-MatX<-as.matrix(WareByUnitT1[,2:ncol(WareByUnitT1)]) 
-rownames(MatX)<-WareByUnitT1$unit
-
-# This is the second function that we are now using as of 12/15/2016 
-require(ca)
-ca3<-ca(MatX)
-
-# Default plot
-plot(ca3)
-
-# Summary(ca3) - inertia plot
-plot(1:(length(ca3$sv)), ca3$sv^2 / sum(ca3$sv^2))
+# Optionally, remove types and units from the analysis, after an inital run. 
+ 
+# wareByUnitT_forCA <- wareByUnitT_forCA %>% select( 
+#     - 'Nottingham', 
+#     - 'Refined Earthenware, modern',
+#     - 'American Stoneware',
+#     - 'Refined Stoneware, unidentifiable',
+#     - 'Fulham Type',
+#     - 'Saintonge',
+#     - 'Astbury Type', 
+#     - 'White Salt Glaze'
+# )
+  
+wareByUnitT_forCA <- wareByUnitT_forCA %>% filter(
+    unit != '062.5364')
 
 
-# Create dataframe of unit/context dimension 1 and 2 scores for ggplot
-rowscores <- data.frame(ca3$rowcoord[,1], ca3$rowcoord[,2])
-colnames(rowscores) <- c("Dim1", "Dim2")
+matX <- as.matrix(wareByUnitT_forCA[,-1]) 
+rownames(matX) <- wareByUnitT_forCA$unit
 
-# Create dataframe of ware type dimension 1 and 2 scores for ggplot
-colscores <- data.frame(ca3$colcoord[,1], ca3$colcoord[,2])
-colnames(colscores) <- c("Dim1", "Dim2")
+ca1<-ca(matX)
+# Summary(ca1) - inertia plot with broken stick
 
-# Create dataframe with units and types sorted by Dim 1 row and column (type) scores
-scoreDatessorted <-sortData(rowscores$Dim1,
-                            colscores$Dim1,
-                            WareByUnitT1)
-
-scoreDatessorted <-sortData(ca3$rowcoord[,1],
-                            ca3$colcoord[,1],
-                            WareByUnitT1)
-
-# now we prep the sorted dataframe to make a Ford-style battleship plot
-# convert to a matrix, whose cols are the counts
-# make the unit name a 'rowname" of the matrix
-MatY<-as.matrix(scoreDatessorted[,2:ncol(scoreDatessorted)])
-rownames(MatY)<-scoreDatessorted$unit
-rSums<- matrix (rowSums(MatY),nrow(MatY),ncol(MatY), byrow=F)
-MatPropY<-MatY/rSums
-
-#(package for seriation)
-library(plotrix) 
-battleship.plot(MatPropY,
-                mar=c(2,5,5,1),
-                #main = 'Seriation by Dim 1 Score',
-                xlab='Ware Type',
-                ylab= 'Context',
-                col='grey')
-
-#### Create plot: Dim 1 and Dim 2 context scores
-require(ggplot2)
-library(ggrepel)
-p1 <- ggplot(rowscores, aes(x=rowscores$Dim1,y=rowscores$Dim2))+
-  geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
-  geom_text(aes(label=rownames(rowscores)),vjust=-.6, hjust=-.1, cex=5)+
-  #  xlim(-4,4)+
-  # geom_text_repel(aes(label=rownames(rowscores)), cex=5, segment.alpha=0.2) +
-  theme_classic()+
-  labs(title="Morne Patate Village", x="Dimension 1", y="Dimension 2")+
-  theme(plot.title=element_text(size=rel(2), hjust=0.5),axis.title=element_text(size=rel(1.75)),
-        axis.text=element_text(size=rel(1.5)))
-p1
-#ggsave("04_MPVillage_CADim1Dim2_NoQuad.png", p1, width=10, height=7.5, dpi=300)
-#p1 + geom_vline(xintercept=c(-0.7), colour="black")
+# put the result in dataframes
+inertia <- data.frame('Inertia' = prop.table(ca1$sv^2))
+rowScores <- data.frame(ca1$rowcoord, rownames=ca1$rownames)
+colScores <- data.frame(ca1$colcoord, rownames=ca1$colnames)
 
 
-#### Create plot: Dim 1 and Dim 2 ware type scores
-p2 <- ggplot(colscores, aes(x=colscores$Dim1,y=colscores$Dim2))+
-  geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
-  # geom_text(aes(label=rownames(colscores)),vjust=-.6, cex=5)+
-  geom_text_repel(aes(label=rownames(colscores)), cex=5, segment.alpha=0.2) +
-  theme_classic()+
-  labs(title="Morne Patate Village", x="Dimension 1", y="Dimension 2")+
-  theme(plot.title=element_text(size=rel(2.25), hjust=0.5),axis.title=element_text(size=rel(1.75)),
-        axis.text=element_text(size=rel(1.5)))
-p2
-ggsave("05_MPVillage_CADim1Dim2wares_NoQuad.png", p2, width=10, height=7.5, dpi=300)
-#p2 + geom_vline(xintercept=c(-0.7), colour="black")
-
-# plot the col scores on dim1 and dim2, which types are important in which regions of the plot
-# plot(ca3$colcoord[,1],ca3$colcoord[,2],pch=21, bg="black",cex=1.25,
-#      xlab="Dimension 1", ylab="Dimension 2", asp=1 )
-# text(ca3$colcoord[,1],ca3$colcoord[,2],rownames(ca3$colcoord),
-#      pos=4 ,cex=.75, col="black")
-
-#For ggplot histogram you need to have the context and date information in a dataframe
-
-#Get units from summary of CA scores
-rowscores$unit <- rownames(rowscores)
-
-# Make MCD info into its own dataframe, change data type to character
-blueMCD <- MCDByUnit$MCDs
-blueMCD$unit <- as.character(blueMCD$unit)
-
-# create new dataframe that contains Dim 1 scores and MCDs
-scoreDates0  <- inner_join(rowscores, blueMCD, by='unit')
-scoreDates <- filter(scoreDates0, MCD > 1)
-#write.csv(scoreDates, 'scoreDates.csv')
-
-p3 <- ggplot(scoreDates, aes(x=scoreDates$Dim1,y=scoreDates$blueMCD))+
-  geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
-  geom_text(aes(label=scoreDates$unit),vjust=-.6, hjust=-.1, cex=5)+
-  #geom_text_repel(aes(label=rownames(rowscores)), cex=6, segment.alpha=0.2) +
-  theme_classic()+
-  scale_x_continuous(breaks=seq(-2, 10, 1))+
-    scale_y_continuous(breaks=seq(1700, 1930, 10))+
-  labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD")+
-  theme(plot.title=element_text(size=rel(2.25), hjust=0.5),axis.title=element_text(size=rel(1.75)),
-        axis.text=element_text(size=rel(1.5)))
-p3 
-ggsave("06_MPVillage_CADim1blueMCD_NoQuad.png", p3, width=10, height=7.5, dpi=300)
-
-
-# Dim 2
-p3A <- ggplot(scoreDates, aes(x=scoreDates$Dim2,y=scoreDates$blueMCD))+
-  geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
-  #geom_text(aes(label=rownames(rowscores)),vjust=-.6, hjust=-.1, cex=5)+
-  #geom_text_repel(aes(label=scoreDates$unit), cex=6, segment.alpha=0.2) +
-  theme_classic()+
-  scale_y_continuous(breaks=seq(1790, 1910, 10))+
-  labs(title="Morne Patate", x="Dimension 2", y="BLUE MCD")+
-  theme(plot.title=element_text(size=rel(2.25), hjust=0.5),axis.title=element_text(size=rel(1.75)),
-        axis.text=element_text(size=rel(1.5)))
-p3A
-#ggsave("CAbySitePhase_AllCabin_Dim2BlueMCD.png", p3A, width=10, height=7.5, dpi=300)
-
-####Section 6: Histogram and Phasing #######################
-
-# Create Plot histogram Dim 1 scores weighted
-p5 <- ggplot(scoreDates, aes(x=scoreDates$Dim1, weight=scoreDates$Count/sum(scoreDates$Count)))+
-  geom_histogram(aes(y=..density..), colour="gray", fill="tan", binwidth=0.1, boundary=0.5)+
-  #stat_function(fun = dnorm, colour = "blue")+
-  scale_x_continuous(breaks=seq(-3, 9.5, 0.5))+
-  theme_classic()+
-  labs(title="Morne Patate Village", x="Dimension 1", y="Density")+
-  theme(plot.title=element_text(size=rel(2.25), hjust=0.5),axis.title=element_text(size=rel(1.75)),
-        axis.text=element_text(size=rel(1.5)))
-p5A <- p5 + geom_density(fill=NA) + geom_vline(xintercept=c(0, 3), colour="black")
-p5A
-ggsave("07_MPVillage_AllPhases_histogram_NoQuad.png", p5A, width=10, height=7.5, dpi=300)
-
-
-# create a vector for the phases with as many entries as assemblages
-scoreDates$Phase <- NA
-
-# do the phase assigments
-scoreDates$Phase[(scoreDates[,1] <= 0.0)] <- 'P03'
-scoreDates$Phase[(scoreDates[,1] > 0.0) & (scoreDates[,1] < 3.0)] <- 'P02'
-scoreDates$Phase[(scoreDates[,1] > 3.0)] <- 'P01'
-
-write.csv(scoreDates, file='scoreDates_MPvillage.csv')
-
-
-
-#Order by dim1 score
-CA_MCD_Phase <- scoreDates[order(scoreDates$Dim1),]
-
-
-#weighted mean
-#tapply function = applies whatever function you give it, x is object on which you calculate the function
-#W is numerical weighted vector
-tapply(CA_MCD_Phase$blueMCD, CA_MCD_Phase$Phase, weighted.mean)
-
-#Once phases are assigned we need to calculate MCDs and TPQs by phase 
-#Add phase assignments to ware counts by unit
-CA_MCD_Phase2 <- left_join(WareByUnitT2Sorted, CA_MCD_Phase, by='unit')
-#get rid of dimscores and MCD columns, keep phase column
-CA_MCD_Phase2 <- CA_MCD_Phase2[-c(1, 25:29)]
-
-p6 <- ggplot(CA_MCD_Phase,aes(x=CA_MCD_Phase$Dim1,y=CA_MCD_Phase$blueMCD))+
-  #  scale_y_continuous(limits=c(1790, 1920))+
-  geom_point(aes(colour=CA_MCD_Phase$Phase),size=5)+
- # geom_text_repel(aes(label=CA_MCD_Phase$unit), cex=6) +
-  geom_text(aes(label=CA_MCD_Phase$unit),vjust=-.6, cex=5)+
-    theme_classic()+
-  labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD")+
-  theme(plot.title=element_text(size=rel(2), hjust=0.5),axis.title=element_text(size=rel(1.75)),
-        axis.text=element_text(size=rel(1.5)), legend.text=element_text(size=rel(1.75)),
-        legend.title=element_text(size=rel(1.5)), legend.position="bottom")+
-  scale_colour_manual(name="DAACS Phase",
-                      labels=c("P01", "P02", "P03"),
-                      values=c("skyblue", "blue", "darkblue"))
-p6
-#save the plot for website chronology page/presentations
-ggsave("MPvillage_Dim1MCDcolor_2018.png", p6, width=10, height=7.5, dpi=300)
-
-p7 <- ggplot(CA_MCD_Phase,aes(x=CA_MCD_Phase$Dim1,y=CA_MCD_Phase$blueMCD))+
-  #  scale_y_continuous(limits=c(1790, 1920))+
-  geom_point(aes(colour=CA_MCD_Phase$Phase),size=5)+
-  #geom_text_repel(aes(label=CA_MCD_Phase$unit), cex=6) +
-  #geom_text(aes(label=CA_MCD_Phase$unit),vjust=-.6, cex=5)+
-  theme_classic()+
-  labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD")+
-  theme(plot.title=element_text(size=rel(2), hjust=0.5),axis.title=element_text(size=rel(1.75)),
-        axis.text=element_text(size=rel(1.5)), legend.text=element_text(size=rel(1.75)),
-        legend.title=element_text(size=rel(1.5)), legend.position="bottom")+
-  scale_colour_manual(name="DAACS Phase",
-                      labels=c("P01", "P02", "P03"),
-                      values=c("skyblue", "blue", "darkblue"))
-p7
-ggsave("MPvillage_Dim1MCDnolabel_2018.png", p7, width=10, height=7.5, dpi=300)
-
-
-#aggregate counts for ware type by phase
-require(plyr)
-WareByPhase <- ddply(CA_MCD_Phase2, "Phase", numcolwise(sum))
-
-#Check ware by phase
-WareByPhase2 <- filter(WareByPhase, !is.na(Phase)) 
-rowSums(WareByPhase2[c(2:23)])
-
-#alter EstimateMCDandTPQ function to have phaseData as input for unitData
-EstimateMCDandTPQ<- function(phaseData,typeData){
-  #for debugging
-  #phaseData<- WareByPhase
-  #typeData <- MCDTypeTable     
-  countMatrix<- as.matrix(phaseData[,2:ncol(phaseData)])
-  phaseNames <- (phaseData[,1])
-  nPhases <- nrow(phaseData)   
-  nTypes<- nrow(typeData)
-  nTypesFnd <-ncol(countMatrix)
-  typeNames<- colnames(countMatrix)
-  # create two col vectors to hold inverse variances and midpoints
-  # _in the order in which the type variables occur in the data_.
-  invVar<-matrix(data=0,nrow=nTypesFnd, ncol=1)
-  mPoint <- matrix(data=0,nrow=nTypesFnd, ncol=1)
-  for (i in (1:nTypes)){
-    for (j in (1:nTypesFnd)){
-      if (typeData$Ware[i]==typeNames[j]) {
-        invVar[j,]<-typeData$inverseVar[i] 
-        mPoint[j,] <-typeData$midPoint[i]
-      }
-    }
+# Compute the broken stick model inertia
+broken.stick <- function(p)
+  # Compute the expected values of the broken-stick distribution for 'p' pieces.
+  # Example: broken.stick.out.20 = broken.stick(20)
+  #             Pierre Legendre, April 2007
+{
+  result = matrix(0,p,2)
+  colnames(result) = c("Dim","Expected.Inertia")
+  for(j in 1:p) {
+    E = 0
+    for(x in j:p) E = E+(1/x)
+    result[j,1] = j
+    result[j,2] = E/p
   }
-  # replace NAs for types with no dates with 0s -- so they do not count
-  # compute the blue MCDs
-  # get a unit by type matrix of inverse variances
-  invVarMat<-matrix(t(invVar),nPhases,nTypesFnd, byrow=T)
-  # a matrix of weights
-  blueWtMat<- countMatrix * invVarMat
-  # sums of the weight
-  sumBlueWts <- rowSums(blueWtMat)
-  # the BLUE MCDs
-  blueMCD<-(blueWtMat %*% mPoint) / sumBlueWts
-  # compute the vanilla MCDs
-  sumWts <- rowSums(countMatrix)
-  # the vanilla MCDs
-  MCD<-(countMatrix %*% mPoint) / sumWts
-  # now for the TPQs
-  meltedPhaseData<- melt(phaseData, id.vars='Phase',  variable.name = 'Ware', value.name='count')
-  meltedPhaseData1 <- subset(meltedPhaseData, count > 0) 
-  mergedPhaseData <- merge(x = meltedPhaseData1, y = typeData,  by.x='Ware', by.y='Ware')
-  # the trick is that to figure out the tpq it's best to have each record (row) represent an individual sherd
-  # but in its current state, each record has a count that is likely more than 1 so it's necessary to break them up
-  # use rep and rownames - rowname is a unique number for each row, kind of link an index
-  # rep goes through dataframe mergedUnitData and replicates based on the count column, i.e. if count is
-  # 5 it will create 5 records or rows and only replicates columns 2 and 6 (2 is unit name and 6 is begin date)
-  repPhaseData <- mergedPhaseData[rep(rownames(mergedPhaseData),mergedPhaseData$count),c(2,6)]
-  #once all the rows have a count of one, then can run the quantile function
-  TPQ <- tapply(repPhaseData$BeginDate,repPhaseData$Phase, 
-                function(x) quantile(x, probs =1.0, type=3 ))              
-  TPQp95 <- tapply(repPhaseData$BeginDate,repPhaseData$Phase, 
-                   function(x) quantile(x, probs = .95 , type=3 ))                 
-  TPQp90 <- tapply(repPhaseData$BeginDate,repPhaseData$Phase, 
-                   function(x) quantile(x, probs = .90,  type=3 ))   
-  # Finally we assemble the results in to a list
-  MCDs<-data.frame(phaseNames,MCD,blueMCD, TPQ, TPQp95, TPQp90, sumWts )
-  colnames(MCDs)<- c('Phase','MCD','blueMCD', 'TPQ', 'TPQp95', 'TPQp90', 'Count')
-  midPoints <- data.frame(typeNames,mPoint)
-  MCDs <- list('MCDs'=MCDs,'midPoints'=midPoints)
-  return(MCDs)
-} 
+  result <- result
+  return(data.frame(result))
+}
 
-#end of function EstimateMCD
-
-# apply the function
-MCDByPhase<-EstimateMCDandTPQ(WareByPhase2,MCDTypeTable)
-# 
-# # let's see what it looks like
-MCDByPhase$MCDs
-
-# #check sums of counts for phases
-# ddply(CA_MCD_Phase2, .(Phase), summarise, Count=sum(count))
-# 
-# #weighted mean
-# #tapply function = applies whatever function you give it, x is object on which you calculate the function
-# #W is numerical weighted vector
-# tapply(CA_MCD_Phase2$blueMCD, CA_MCD_Phase2$Phase, weighted.mean)
-# 
-# 
-
-#####Section 6: Context Phases #####################
-
-#Once phases are assigned we need to have a list of Phases by context to update the database 
-#Creat context-level dataframe for the project including Context, Feature Number, and SGs
-#ContextListwareTypeDataX<-dbGetQuery(DRCcon,'
-ContextList<-dbGetQuery(DRCcon,'
-                        SELECT
-                        "public"."tblCeramic"."Quantity",
-                        "public"."tblCeramicWare"."Ware",
-                        "public"."tblCeramicWare"."BeginDate",
-                        "public"."tblCeramicWare"."EndDate",
-                        "public"."tblCeramicCEWType"."CeramicCEWType",
-                        "public"."tblProjectName"."ProjectName",
-                        "public"."tblContext"."ProjectID",
-                        "public"."tblContext"."Context",
-                        "public"."tblContext"."DAACSStratigraphicGroup",
-                        "public"."tblContext"."MasterContextNumber",
-                        "public"."tblContext"."FeatureNumber",
-                        "public"."tblContext"."QuadratID",
-                        "public"."tblContext"."DAACSPhase",
-                        "public"."tblContext"."MasterContextInterpretation"
-                        
-                        FROM
-                        "public"."tblProjectName"
-                        INNER JOIN "public"."tblProject" ON "public"."tblProject"."ProjectNameID" = "public"."tblProjectName"."ProjectNameID"
-                        INNER JOIN "public"."tblContext" ON "public"."tblContext"."ProjectID" = "public"."tblProject"."ProjectID"
-                        INNER JOIN "public"."tblContextSample" ON "public"."tblContextSample"."ContextAutoID" = "public"."tblContext"."ContextAutoID"
-                        INNER JOIN "public"."tblGenerateContextArtifactID" ON "public"."tblContextSample"."ContextSampleID" = "public"."tblGenerateContextArtifactID"."ContextSampleID"
-                        INNER JOIN "public"."tblCeramic" ON "public"."tblCeramic"."GenerateContextArtifactID" = "public"."tblGenerateContextArtifactID"."GenerateContextArtifactID"
-                        INNER JOIN "public"."tblCeramicWare" ON "public"."tblCeramic"."WareID" = "public"."tblCeramicWare"."WareID"
-                        LEFT JOIN "public"."tblCeramicCEWType" ON "public"."tblCeramic"."CeramicCEWTypeID" = "public"."tblCeramicCEWType"."CeramicCEWTypeID"
-                        
-                        WHERE                     
-                        "public"."tblContext"."ProjectID" = \'1243\'
-                        ')             
+bs <- broken.stick(nrow(inertia))
 
 
-ContextList$DAACSStratigraphicGroup[is.na(ContextList$DAACSStratigraphicGroup)] <- ''
-ContextList$FeatureNumber[is.na(ContextList$FeatureNumber)] <- ''
 
-ContextList1 <-
-  mutate(ContextList, unit=ifelse((FeatureNumber == '' & DAACSStratigraphicGroup == ''),
-                                   paste(Context),
-                                   ifelse((FeatureNumber != '' & DAACSStratigraphicGroup == ''),
-                                          paste(Context,'F',FeatureNumber),
-                                          ifelse((FeatureNumber == '' & DAACSStratigraphicGroup != ''),
-                                                 paste(DAACSStratigraphicGroup),
-                                                 ifelse((FeatureNumber != '' & DAACSStratigraphicGroup != ''),
-                                                        paste(FeatureNumber,DAACSStratigraphicGroup),
-                                                        paste(Context)
-                                                 )))))
+# plot the proportion of inertia
+theme_set(theme_classic(base_size = 20))
+
+p <- ggplot(data=inertia , aes(x= 1:length(Inertia), y=Inertia)) +
+  # geom_bar(stat="identity", fill="grey") +
+  geom_line(col= "cornflower blue", size=1) +
+  geom_point(shape=21, size=5, colour="black", fill="cornflower blue") +
+  labs( title="Morne Patate Village", x="Dimension", y='Porportion of Inertia' ) +
+  geom_line(aes(y = bs[,2], x= bs[,1]), color = "black", linetype = "dashed", 
+            size=1)
+p
 
 
-#Merge ContextList and CA_MCD_Phase by unit field
-ContextPhases <- left_join(ContextList1, CA_MCD_Phase, by="unit")
+# ggplot version of row scores dim 1 and dim 2
+library(ggrepel)
+set.seed(42)
+p1 <- ggplot(rowScores, aes(x=Dim1,y=Dim2))+
+  geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
+  # geom_text(aes(label= rownames(rowScores)),vjust=-.6, cex=5) +
+  #geom_text_repel(aes(label=rownames(rowScores)), cex = 4) +
+  labs(title="Morne Patate Village", x="Dimension 1", y="Dimension 2")
+p1
+#save the plot for website chronology page/presentations
+#ggsave("Site 6_Figure1Dim1Dim2_2018cxt.png", p1, width=10, height=7.5, dpi=300)
 
-#Remove unnecessary columns
-ContextPhases3<- unique(ContextPhases)
+#ggplot version of col scores dim 1 and dim 2
+p2 <- ggplot(colScores, aes(x = Dim1,y = Dim2))+
+  geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
+  #geom_text(aes(label=CA_MCD_Phase1$unit),vjust=-.6, cex=5)+
+  geom_text_repel(aes(label=rownames(colScores)), cex= 3) +
+  labs(title="Morne Patate Village", x="Dimension 1", y="Dimension 2")
 
-ContextPhases4 <- filter(ContextPhases3, !is.na(ContextPhases3$Phase))
+p2
+#save the plot for website chronology page/presentations
+#ggsave("Site 6_Figure2WareTypes_2018cxt.png", p2, width=10, height=7.5, dpi=300)
 
-#Create csv list of contexts and phase assignments, label by site name
-write.csv(ContextPhases4, file='ContextPhases_MPvillage.csv')
+
+# sort the data matrix that went into the CA on the dim1 scores and do a 
+# battleship plot with the sorted data.
+wareByUnitT_Sorted  <- sortData(rowScores$Dim1, colScores$Dim1, wareByUnitT_forCA)
+Mat<-as.matrix(wareByUnitT_Sorted[,-1])
+rownames(Mat)<-wareByUnitT_Sorted$unit
+rSums<- matrix (rowSums(Mat),nrow(Mat),ncol(Mat), byrow=F)
+MatProp<-Mat/rSums
+# Do the plot
+battleship.plot(MatProp,
+                mar=c(2,4,8,4),
+                cex.labels=.8,
+                main = 'Seriation by CA Dimension 1',
+                xlab='Ware Type',
+                ylab= 'Context',
+                col='grey')
+
+#### 14. Compare MCD and CA dim scores
+
+# CA Dim 1 vs. MCDs
+
+#ggplot version of CA Dim 1 vs. MCDs
+p3 <- ggplot(rowScores, aes(x=rowScores$Dim1,y=MCDByUnit$MCDs$blueMCD))+
+geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
+#geom_text(aes(label=CA_MCD_Phase1$unit),vjust=-.6, cex=5)+
+#geom_text_repel(aes(label=rownames(rowscores)), cex=6) +
+labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD") 
+p3 
+
+# save the plot for website chronology page/presentations
+# ggsave("Site 6_Dim1BLUEMCD_2018cxt.png", p3, width=10, height=7.5, dpi=300)
+
+
+p4 <- ggplot(rowScores, aes(x=Dim2,y=MCDByUnit$MCDs$blueMCD))+
+geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
+#geom_text(aes(label=CA_MCD_Phase1$unit),vjust=-.6, cex=5)+
+# geom_text_repel(aes(label=rownames(rowscores)), cex=6) +
+labs(title="Morne Patate Village", x="Dimension 2", y="BLUE MCD") 
+p4 
+#ggsave("Site 6_Dim2BLUEMCD.png", p4, width=10, height=7.5, dpi=300)
+
+
+
+#### 15. Histogram of Dim 1 scores for Phasing
+# create a data frame of units, counts, and mcds
+CA_MCD<-data.frame(
+  unit = MCDByUnit$MCDs$unit,
+  dim1Scores =  ca1$rowcoord[,1],
+  dim2Scores = ca1$rowcoord[,2],
+  MCD =  MCDByUnit$MCDs$MCD,
+  blueMCD = MCDByUnit$MCDs$blueMCD,
+  count = MCDByUnit$MCDs$Count)
+
+# Dim 1 Scores Weighted Histogram, you may need to change scale
+dim1ForHist<- data.frame(dim1 = rep(CA_MCD$dim1Scores, CA_MCD$count))
+p5 <- ggplot(dim1ForHist, aes(x = dim1)) +
+      geom_histogram(aes(y=..density..), colour="black", fill="tan", binwidth=0.2, 
+                  boundary= .1) +
+      scale_x_continuous(breaks=seq(- 8 , 4, 2))+
+      labs(title="Morne Patate Village", x="Dimension 1", y="Density") +
+      geom_density(fill=NA)
+p5
+
+
+# Add lines for phase breaks
+p5a <- p5 + geom_vline(xintercept=c(- 1.9, 0 ), colour = "gray", linetype = "dashed",
+            size=1)
+p5a
+
+
+#### 16.  Do the Dim 1 -  MCD scatterplot with Phase assignments  
+# Do the Phase assigments, based on the Dim1 scores
+CA_MCD_Phase <- CA_MCD %>% mutate( Phase = case_when (dim1Scores <= -1.9 ~ 'P01',
+                                      (dim1Scores > -1.9) & 
+                                      (dim1Scores <= 0) ~ 'P02',
+                                      dim1Scores > 0 ~ 'P03'
+                                      ))
+
+# BlueMCD By Dim1 plot by Phase
+# This one uses DAACS Website colors 
+
+p6 <- ggplot(CA_MCD_Phase,aes(x = dim1Scores, y = blueMCD, 
+                              fill= Phase)) +
+  #scale_y_continuous(limits=c(1750, 1950)) +
+  geom_point(shape=21,  alpha = .75, size= 6)  + 
+  scale_fill_manual(name="DAACS Phase",
+                      labels=c("P01", "P02", "P03"),
+                      values=c("skyblue", "blue", "darkblue")) + 
+  #geom_text_repel(aes(label= unit), cex=4) +
+  labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD")
+p6
+
+# And here we use viriris coplors (for color blind)
+p6 <- ggplot(CA_MCD_Phase,aes(x = dim1Scores,y = blueMCD, fill= factor(Phase))) +
+  #scale_y_continuous(limits=c(1760, 1920)) +
+  geom_point(shape=21,  alpha = .75, size= 6)  + 
+  scale_fill_viridis(discrete= T, name="DAACS Phase",
+                     labels=c("P01", "P02", "P03")) + 
+  #geom_text_repel(aes(label= unit), cex=4) +
+  labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD")
+p6
+
+# ggsave("MPvillage_Dim1MCDcolor_2018.png", p6, width=10, height=7.5, dpi=300)
+
+
+##### 16. Compute the MCDs and TPQs for the phases
+
+# join the Phases to the ware by unit data
+unitPhase <- select(CA_MCD_Phase, unit, Phase)
+wareByUnit_Phase<- left_join (wareTypeData_Unit, unitPhase, by = 'unit')
+
+# Compare assigned DAACS phases to the ones we came up with above
+# looks lilke there are diffrences!!!!
+with(wareByUnit_Phase, table(DAACSPhase, Phase))
+
+
+# Transpose the data for the MCD and CA ####
+wareByPhaseT <- wareByUnit_Phase %>% group_by(Ware, Phase) %>% 
+  summarise(count = sum(Quantity)) %>%
+  spread(Ware, value=count , fill=0 )
+
+
+dataForMCD_Phase <- RemoveTypesNoDates(wareByPhaseT, MCDTypeTable)
+
+# apply the Estimate MCD function
+MCDByPhase<-EstimateMCD(dataForMCD_Phase$unitData,
+                        dataForMCD_Phase$typeData)
+
+# let's see what it looks like
+MCDByPhase
+
+
+
+#### 17. Write out contexts and phase assignments #####
+
+phaseAssignments <- select(wareByUnit_Phase, ProjectName, ProjectID, Context, Phase)
+phaseAssignments <- unique(phaseAssignments)
+
+
+write.csv(phaseAssignments, file='ContextPhases_MPvillage.csv')
 
 
 
