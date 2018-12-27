@@ -19,14 +19,7 @@ library (plotrix)
 library(ggplot2)
 library(viridis)
 
-
-
-# tell DBI which driver to use
-pgSQL <- dbDriver("PostgreSQL")
-# establish the connection
-DRCcon<-dbConnect(pgSQL, host='drc.iath.virginia.edu', port='5432',
-                  dbname='daacs-production',
-                  user='drcquery', password='!queryacct!')
+source('credentials')
 
 #### 1. get the table with the ware type date ranges ####
 # get the table with the ware type date ranges
@@ -94,11 +87,11 @@ MCDTypeTable <- MCDTypeTable %>%
   mutate(BeginDate = replace(BeginDate, Ware %in% c('French Coarse Earthenware',
                                                     'Vallauris',
                                                     'Saintonge',
-                                                    'de lHuveaune'), 1675),
+                                                    'Huveaune'), 1675),
          EndDate = replace(EndDate, Ware %in% c('French Coarse Earthenware',
                                                 'Vallauris',
                                                 'Saintonge',
-                                                'de lHuveaune'),1900))
+                                                'Huveaune'),1900))
 
 # Set a minimal start date for all types - this may bite you later if new start 
 # dates are >= end dates
@@ -172,16 +165,30 @@ wareByUnitT <- wareTypeData_Unit %>% group_by(Ware,unit) %>%
 # 8.1 It is possible at the point to to drop types you do not in the  MCD computations
 # But it is not clear why one would want to do this. Here we name the types we do NOT
 # want included:
-wareByUnitT1 <- wareByUnitT %>% select( 
-                             - 'Nottingham', 
+wareByUnitT1 <- wareByUnitT %>% dplyr::select(- 'Nottingham', 
                               - 'Refined Earthenware, modern',
                              - 'American Stoneware',
                             - 'Refined Stoneware, unidentifiable',
                              - 'Fulham Type',
                               - 'Saintonge',
                              - 'Astbury Type', 
-                              - 'White Salt Glaze'
-                          )
+                              - 'White Salt Glaze',
+                            - 'Delftware, Dutch/British')
+
+badVars <- c('Nottingham', 
+'Refined Earthenware, modern',
+ 'American Stoneware',
+'Refined Stoneware, unidentifiable',
+ 'Fulham Type',
+ 'Saintonge',
+ 'Astbury Type', 
+ 'White Salt Glaze')
+
+ goodVars <- !names(wareByUnitT) %in% badVars
+ wareByUnitT1 <- wareByUnitT[,goodVars] 
+ 
+
+
 
 # 8.2  We may also want to enforce a sample size cut off on the MCD analysis.
 # MCDs and TPQs are more reliable with larger samples, but may be in 
@@ -216,7 +223,7 @@ wareByUnitT1 <- wareByUnitT1[,c(T,colSums(wareByUnitT1[,-1])
 #   typeDataWithDates has the types with dates
 RemoveTypesNoDates <- function(unitData,typeData){
   #unitData<- WareByUnitT1
-  #typeData <-MCDTypeTabl
+  #typeData <-MCDTypeTable
   typesWithNoDates <- typeData$Ware[(is.na(typeData$midPoint))] 
   # types in the MCD table with no dates.
   moreTypesWithNoDates <- colnames(unitData)[-1][! colnames(unitData)[-1] %in% 
@@ -387,8 +394,10 @@ ca1<-ca(matX)
 
 # put the result in dataframes
 inertia <- data.frame('Inertia' = prop.table(ca1$sv^2))
-rowScores <- data.frame(ca1$rowcoord, rownames=ca1$rownames)
-colScores <- data.frame(ca1$colcoord, rownames=ca1$colnames)
+############ fix rownames?? ################
+
+rowScores <- data.frame(ca1$rowcoord[,1:5], unit =ca1$rownames)
+colScores <- data.frame(ca1$colcoord[,1:5], type =ca1$colnames)
 
 
 # Compute the broken stick model inertia
@@ -431,9 +440,12 @@ library(ggrepel)
 set.seed(42)
 p1 <- ggplot(rowScores, aes(x=Dim1,y=Dim2))+
   geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
-  # geom_text(aes(label= rownames(rowScores)),vjust=-.6, cex=5) +
-  #geom_text_repel(aes(label=rownames(rowScores)), cex = 4) +
-  labs(title="Morne Patate Village", x="Dimension 1", y="Dimension 2")
+  # geom_text(aes(label= unit,vjust=-.6, cex=5) +
+  geom_text_repel(aes(label= unit), cex = 4) +
+  labs(title="Morne Patate Village", 
+       x = paste ("Dimension 1",":  ", round(inertia[1,]*100),'%', sep=''), 
+       y= paste ("Dimension 2",":  ", round(inertia[2,]*100),'%', sep='')
+       )
 p1
 #save the plot for website chronology page/presentations
 #ggsave("Site 6_Figure1Dim1Dim2_2018cxt.png", p1, width=10, height=7.5, dpi=300)
@@ -441,10 +453,12 @@ p1
 #ggplot version of col scores dim 1 and dim 2
 p2 <- ggplot(colScores, aes(x = Dim1,y = Dim2))+
   geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
-  #geom_text(aes(label=CA_MCD_Phase1$unit),vjust=-.6, cex=5)+
-  geom_text_repel(aes(label=rownames(colScores)), cex= 3) +
-  labs(title="Morne Patate Village", x="Dimension 1", y="Dimension 2")
-
+  #geom_text(aes(label= type),vjust=-.6, cex=5)+
+  geom_text_repel(aes(label=type), cex= 3) +
+  labs(title="Morne Patate Village", 
+       x = paste ("Dimension 1",":  ", round(inertia[1,]*100),'%', sep=''), 
+       y= paste ("Dimension 2",":  ", round(inertia[2,]*100),'%', sep='')
+        )  
 p2
 #save the plot for website chronology page/presentations
 #ggsave("Site 6_Figure2WareTypes_2018cxt.png", p2, width=10, height=7.5, dpi=300)
@@ -466,44 +480,39 @@ battleship.plot(MatProp,
                 ylab= 'Context',
                 col='grey')
 
+
+
 #### 14. Compare MCD and CA dim scores
+# create a data frame of units, counts, and mcds
+CA_MCD <- inner_join(MCDByUnit$MCDs, rowScores, by='unit' )
 
-# CA Dim 1 vs. MCDs
-
+# Plot CA Dim 1 vs. MCDs
 #ggplot version of CA Dim 1 vs. MCDs
-p3 <- ggplot(rowScores, aes(x=rowScores$Dim1,y=MCDByUnit$MCDs$blueMCD))+
+p3 <- ggplot(CA_MCD, aes(x=Dim1,y=blueMCD))+
 geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
-#geom_text(aes(label=CA_MCD_Phase1$unit),vjust=-.6, cex=5)+
-#geom_text_repel(aes(label=rownames(rowscores)), cex=6) +
-labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD") 
+#geom_text(aes(label=unit),vjust=-.6, cex=5)+
+geom_text_repel(aes(label=unit), cex=6) +
+labs(title="Morne Patate Village", 
+     x="Dimension 1", 
+     y="BLUE MCD") 
 p3 
-
 # save the plot for website chronology page/presentations
 # ggsave("Site 6_Dim1BLUEMCD_2018cxt.png", p3, width=10, height=7.5, dpi=300)
 
-
-p4 <- ggplot(rowScores, aes(x=Dim2,y=MCDByUnit$MCDs$blueMCD))+
+p4 <- ggplot(CA_MCD, aes(x = Dim2,y = blueMCD))+
 geom_point(shape=21, size=5, colour="black", fill="cornflower blue")+
-#geom_text(aes(label=CA_MCD_Phase1$unit),vjust=-.6, cex=5)+
-# geom_text_repel(aes(label=rownames(rowscores)), cex=6) +
-labs(title="Morne Patate Village", x="Dimension 2", y="BLUE MCD") 
+#geom_text(aes(label=unit),vjust=-.6, cex=5)+
+ geom_text_repel(aes(label=unit), cex=6) +
+labs(title="Morne Patate Village", 
+     x="Dimension 2", 
+     y="BLUE MCD") 
 p4 
 #ggsave("Site 6_Dim2BLUEMCD.png", p4, width=10, height=7.5, dpi=300)
 
 
-
 #### 15. Histogram of Dim 1 scores for Phasing
-# create a data frame of units, counts, and mcds
-CA_MCD<-data.frame(
-  unit = MCDByUnit$MCDs$unit,
-  dim1Scores =  ca1$rowcoord[,1],
-  dim2Scores = ca1$rowcoord[,2],
-  MCD =  MCDByUnit$MCDs$MCD,
-  blueMCD = MCDByUnit$MCDs$blueMCD,
-  count = MCDByUnit$MCDs$Count)
-
 # Dim 1 Scores Weighted Histogram, you may need to change scale
-dim1ForHist<- data.frame(dim1 = rep(CA_MCD$dim1Scores, CA_MCD$count))
+dim1ForHist<- data.frame(dim1 = rep(CA_MCD$Dim1, CA_MCD$Count))
 p5 <- ggplot(dim1ForHist, aes(x = dim1)) +
       geom_histogram(aes(y=..density..), colour="black", fill="tan", binwidth=0.2, 
                   boundary= .1) +
@@ -514,35 +523,35 @@ p5
 
 
 # Add lines for phase breaks
-p5a <- p5 + geom_vline(xintercept=c(- 1.9, 0 ), colour = "gray", linetype = "dashed",
+p5a <- p5 + geom_vline(xintercept=c(- 3, 0 ), colour = "gray", linetype = "dashed",
             size=1)
 p5a
 
 
 #### 16.  Do the Dim 1 -  MCD scatterplot with Phase assignments  
 # Do the Phase assigments, based on the Dim1 scores
-CA_MCD_Phase <- CA_MCD %>% mutate( Phase = case_when (dim1Scores <= -1.9 ~ 'P01',
-                                      (dim1Scores > -1.9) & 
-                                      (dim1Scores <= 0) ~ 'P02',
-                                      dim1Scores > 0 ~ 'P03'
+CA_MCD_Phase <- CA_MCD %>% mutate( Phase = case_when (Dim1 <= -3 ~ 'P01',
+                                      (Dim1 > -3) & 
+                                      (Dim1 <= 0) ~ 'P02',
+                                       Dim1 > 0 ~ 'P03'
                                       ))
 
 # BlueMCD By Dim1 plot by Phase
 # This one uses DAACS Website colors 
 
-p6 <- ggplot(CA_MCD_Phase,aes(x = dim1Scores, y = blueMCD, 
+p6 <- ggplot(CA_MCD_Phase,aes(x = Dim1, y = blueMCD, 
                               fill= Phase)) +
   #scale_y_continuous(limits=c(1750, 1950)) +
   geom_point(shape=21,  alpha = .75, size= 6)  + 
   scale_fill_manual(name="DAACS Phase",
                       labels=c("P01", "P02", "P03"),
                       values=c("skyblue", "blue", "darkblue")) + 
-  #geom_text_repel(aes(label= unit), cex=4) +
+  geom_text_repel(aes(label= unit), cex=4) +
   labs(title="Morne Patate Village", x="Dimension 1", y="BLUE MCD")
 p6
 
-# And here we use viriris coplors (for color blind)
-p6 <- ggplot(CA_MCD_Phase,aes(x = dim1Scores,y = blueMCD, fill= factor(Phase))) +
+# And here we use viridis colors (for color blind)
+p6 <- ggplot(CA_MCD_Phase,aes(x = Dim1,y = blueMCD, fill= factor(Phase))) +
   #scale_y_continuous(limits=c(1760, 1920)) +
   geom_point(shape=21,  alpha = .75, size= 6)  + 
   scale_fill_viridis(discrete= T, name="DAACS Phase",
@@ -557,8 +566,12 @@ p6
 ##### 16. Compute the MCDs and TPQs for the phases
 
 # join the Phases to the ware by unit data
-unitPhase <- select(CA_MCD_Phase, unit, Phase)
-wareByUnit_Phase<- left_join (wareTypeData_Unit, unitPhase, by = 'unit')
+unitPhase <- select(CA_MCD_Phase, unit, Phase) 
+
+wareByUnit_Phase<- left_join (wareTypeData_Unit, unitPhase, by = 'unit') %>%
+                    mutate(Phase = ifelse(is.na(Phase),'',Phase))
+
+
 
 # Compare assigned DAACS phases to the ones we came up with above
 # looks lilke there are diffrences!!!!
